@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>User Guide — Temporary UPM Access</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 2rem 1rem;
+      background: #f3f4f6;
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .page-heading {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .page-heading h1 {
+      font-size: 1.8rem;
+      margin: 0 0 0.5rem;
+      color: #111827;
+    }
+
+    .page-heading p {
+      font-size: 1rem;
+      color: #6b7280;
+      margin: 0;
+    }
+
+    .step-section {
+      margin-bottom: 4rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .step-section {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+    }
+
+    .step-content h2 {
+      font-size: 1.3rem;
+      margin: 0 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .step-number {
+      background: #000;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .step-content p {
+      color: #4b5563;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .step-content ul {
+      padding-left: 1.25rem;
+      color: #4b5563;
+      font-size: 0.95rem;
+    }
+
+    .step-content li {
+      margin-bottom: 0.5rem;
+    }
+
+    .preview-box {
+      background: #e5e7eb;
+      padding: 1.5rem;
+      border-radius: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Mock UI Elements */
+    .card {
+      padding: 1.5rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      margin: 0 0 0.5rem;
+      text-align: center;
+    }
+
+    .card p {
+      font-size: 0.85rem;
+      color: #666;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .mock-form-group {
+      margin-bottom: 0.75rem;
+      text-align: left;
+    }
+
+    .mock-form-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: #374151;
+    }
+
+    .mock-input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: #f9fafb;
+    }
+
+    .btn {
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      border: 0;
+      font-weight: 600;
+      font-size: 0.85rem;
+      width: 100%;
+      text-align: center;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    .btn-primary {
+      background: #000;
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .badge-pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      color: #9ca3af;
+      margin: 0.75rem 0;
+      font-size: 0.75rem;
+    }
+
+    .divider div {
+      flex: 1;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .divider span {
+      padding: 0 8px;
+    }
+
+    .otp-wrapper {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .otp-input {
+      flex: 1;
+      text-align: center;
+      letter-spacing: 0.2em;
+      font-weight: bold;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid #e5e7eb;
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div class="page-heading">
+      <h1>HSAAS On-Call Roster</h1>
+      <p>User Guide: Accessing with Temporary UPM Email</p>
+    </div>
+
+    <!-- STEP 1 -->
+    <div class="step-section">
+      <div class="step-content">
+        <h2><span class="step-number">1</span> Request Access</h2>
+        <p>If you have a temporary UPM email (e.g., <strong>@student.upm.edu.my</strong> or
+          <strong>@upm.edu.my</strong>) and cannot use Google Sign-in, you must first request manual access.</p>
+        <ul>
+          <li>Go to the <strong>Signup Page</strong>.</li>
+          <li>Enter your full name and valid UPM email.</li>
+          <li>Select your department and the duration of access needed (e.g., 6 months).</li>
+          <li>Submit the request and wait for admin verification.</li>
+        </ul>
+      </div>
+      <div class="preview-box">
+        <div class="card">
+          <h3>Request Access</h3>
+          <p style="margin-bottom:0.75rem">Fill out the form for temporary access.</p>
+          <div class="mock-form-group">
+            <label>Full Name</label>
+            <div class="mock-input">John Doe</div>
+          </div>
+          <div class="mock-form-group">
+            <label>UPM Email</label>
+            <div class="mock-input">john@student.upm.edu.my</div>
+          </div>
+          <div class="btn btn-primary" style="margin-top:0.5rem">Submit Request</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step-section">
+      <div class="step-content">
+        <h2><span class="step-number">2</span> Wait for Approval</h2>
+        <p>Administrators will review your request. During this time, if you try to log in, you will see a pending
+          status.</p>
+        <ul>
+          <li>Approval usually takes 1-2 working days.</li>
+          <li>Once approved, your email will be authorized for the OTP login system.</li>
+        </ul>
+      </div>
+      <div class="preview-box">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🕐</div>
+          <h3 style="margin-bottom: 0.25rem;">Request Pending</h3>
+          <span class="badge badge-pending">Pending</span>
+          <p>Your access request is awaiting admin approval. Please check back later.</p>
+          <div class="btn btn-primary">Check Again</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step-section">
+      <div class="step-content">
+        <h2><span class="step-number">3</span> Receive Login Code</h2>
+        <p>Once approved, you can log in using your UPM email without a password.</p>
+        <ul>
+          <li>Go to the <strong>Login Page</strong>.</li>
+          <li>Enter your approved UPM email in the bottom field.</li>
+          <li>Click <strong>"Send 6-Digit Code"</strong>.</li>
+          <li>Check your UPM mailbox (and junk folder) for a message from Supabase/HSAAS.</li>
+        </ul>
+      </div>
+      <div class="preview-box">
+        <div class="card">
+          <h3>Login</h3>
+          <div class="btn btn-secondary">Sign in with Google</div>
+          <div class="divider">
+            <div></div><span>OR</span>
+            <div></div>
+          </div>
+          <div class="mock-form-group">
+            <div class="mock-input">john@student.upm.edu.my</div>
+          </div>
+          <div class="btn btn-secondary">Send 6-Digit Code</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step-section">
+      <div class="step-content">
+        <h2><span class="step-number">4</span> Verify and Enter</h2>
+        <p>Finalize your login by entering the unique code sent to your email.</p>
+        <ul>
+          <li>Enter the 6-digit code in the field provided.</li>
+          <li>Click <strong>"Verify"</strong> to enter the dashboard.</li>
+          <li>Your session is now active and you can access the roster.</li>
+        </ul>
+      </div>
+      <div class="preview-box">
+        <div class="card">
+          <p style="margin-top:0; font-size:0.75rem; color:#9ca3af;">Enter the code sent to your email.</p>
+          <div class="otp-wrapper">
+            <div class="mock-input otp-input">123456</div>
+            <div class="btn btn-primary" style="width:auto; margin:0; padding: 0.5rem 1rem;">Verify</div>
+          </div>
+          <div class="btn btn-secondary" style="font-size:0.7rem; margin-top:0.75rem; padding: 0.25rem;">← Change email
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      &copy; 2026 HSAAS On-Call Roster System. For technical issues, contact the administrator.
+    </div>
+  </div>
+
+</body>
+
+</html>

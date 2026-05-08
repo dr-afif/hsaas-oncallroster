@@ -1,4 +1,4 @@
-const CACHE_NAME = "roster-cache-v17"; // Bumped for v2.1.0 updates
+const CACHE_NAME = "roster-cache-v18"; // Bumped for v2.2.0 updates
 const urlsToCache = [
   "./",
   "./app-config.js",
