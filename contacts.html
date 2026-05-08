@@ -47,6 +47,14 @@
           sessionStorage.setItem('post_login_redirect', ret);
           location.replace('./login.html');
         } else {
+          const sb = await Auth.initAuth();
+          const { data: hasAccess, error } = await sb.rpc('check_viewer_access');
+          
+          if (error || hasAccess === false) {
+            location.replace('./access-denied.html');
+            return;
+          }
+
           // Show the page only if authenticated
           Auth.populateUserInfo();
           document.body.classList.add('ready');

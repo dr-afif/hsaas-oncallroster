@@ -50,7 +50,17 @@
           sessionStorage.setItem('post_login_redirect', ret);
           location.replace('./login.html');
         } else {
-          // Show the page only if authenticated
+          // Check if they have viewer access (validates temporary users)
+          const sb = await Auth.initAuth();
+          const { data: hasAccess, error } = await sb.rpc('check_viewer_access');
+          
+          if (error || hasAccess === false) {
+            // Redirect to the access-denied page so user can see status and renew
+            location.replace('./access-denied.html');
+            return;
+          }
+
+          // Show the page only if authenticated and authorized
           Auth.populateUserInfo();
           document.body.classList.add('ready');
         }

@@ -12,6 +12,7 @@
       display: grid;
       min-height: 100dvh;
       place-items: center;
+      background: #f9fafb;
     }
 
     .card {
@@ -21,6 +22,7 @@
       border: 1px solid #e5e7eb;
       border-radius: 14px;
       box-shadow: 0 4px 24px rgba(0, 0, 0, .06);
+      background: #fff;
     }
 
     h1 {
@@ -31,6 +33,7 @@
     p {
       color: #555;
       margin: 0 0 1.25rem;
+      font-size: 0.95rem;
     }
 
     button {
@@ -39,6 +42,7 @@
       border: 0;
       cursor: pointer;
       font-weight: 600;
+      font-size: 1rem;
     }
 
     .primary {
@@ -46,10 +50,81 @@
       color: #fff;
     }
 
+    input[type="email"], input[type="text"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      outline: none;
+      margin-bottom: 0.5rem;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: #6366f1;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      color: #9ca3af;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+
+    .divider div { flex: 1; border-top: 1px solid #e5e7eb; }
+    .divider span { padding: 0 10px; }
+
+    .otp-section { margin-bottom: 0.5rem; }
+
+    /* Step 2: code entry — hidden initially */
+    #otpStep2 { display: none; margin-top: 0.75rem; }
+
+    .code-input-wrapper {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    #otpCode {
+      letter-spacing: 0.3em;
+      font-size: 1.3rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0;
+      flex: 1;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+    }
+
+    .hint-text {
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin: 0.35rem 0 0.75rem;
+    }
+
     #status {
       margin-top: .75rem;
-      color: #666;
       font-size: .9rem;
+      text-align: center;
+      min-height: 1.4em;
+    }
+
+    .signup-link {
+      text-align: center;
+      margin-top: 1rem;
+    }
+
+    .signup-link a {
+      font-size: 0.9rem;
+      color: #3b82f6;
+      text-decoration: none;
     }
   </style>
 
@@ -61,24 +136,133 @@
 <body>
   <div class="card">
     <h1>HSAAS On-Call Roster</h1>
-    <p>Sign in with your <strong>@upm.edu.my</strong> account.</p>
-    <button id="loginBtn" class="primary">Sign in with Google</button>
+    <p>Sign in with your <strong>@upm.edu.my</strong> or <strong>@student.upm.edu.my</strong> account.</p>
+
+    <button id="loginBtn" class="primary" style="width:100%; margin-bottom:1rem;">Sign in with Google</button>
+
+    <div class="divider">
+      <div></div><span>OR</span><div></div>
+    </div>
+
+    <!-- Step 1: Enter email -->
+    <div class="otp-section">
+      <input type="email" id="otpEmail" placeholder="your.name@upm.edu.my" autocomplete="email" />
+      <button id="sendCodeBtn" class="btn-secondary" style="width:100%;" onclick="handleSendCode()">Send 6-Digit Code</button>
+    </div>
+
+    <!-- Step 2: Enter code (shown after email is sent) -->
+    <div id="otpStep2">
+      <p class="hint-text" id="otpHint"></p>
+      <div class="code-input-wrapper">
+        <input type="text" id="otpCode" maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" />
+        <button class="primary" onclick="handleVerifyCode()">Verify</button>
+      </div>
+      <button class="btn-secondary" style="font-size:0.82rem; padding: 0.4rem 0.6rem; margin-top:0.3rem;" onclick="resetOtpFlow()">← Change email</button>
+    </div>
+
+    <div class="signup-link">
+      <a href="signup.html">Need temporary access? Request here.</a>
+    </div>
+
     <div id="status">Checking session…</div>
   </div>
 
   <script>
-    (async () => {
-      if (!window.Auth) {
-        await new Promise((resolve, reject) => {
-          let tries = 0;
-          const iv = setInterval(() => {
-            if (window.Auth) { clearInterval(iv); resolve(); }
-            else if (++tries > 300) { clearInterval(iv); reject(new Error("Auth never loaded")); }
-          }, 20);
-        });
+    let pendingOtpEmail = null;
+
+    async function waitForAuth() {
+      if (window.Auth) return;
+      await new Promise((resolve, reject) => {
+        let tries = 0;
+        const iv = setInterval(() => {
+          if (window.Auth) { clearInterval(iv); resolve(); }
+          else if (++tries > 300) { clearInterval(iv); reject(new Error("Auth never loaded")); }
+        }, 20);
+      });
+    }
+
+    async function handleSendCode() {
+      const email = document.getElementById('otpEmail').value.trim().toLowerCase();
+      const statusEl = document.getElementById('status');
+
+      if (!email) { statusEl.textContent = 'Please enter your email address.'; return; }
+      if (!email.endsWith('@upm.edu.my') && !email.endsWith('@student.upm.edu.my')) {
+        statusEl.textContent = 'Only @upm.edu.my or @student.upm.edu.my emails are allowed.';
+        return;
       }
 
+      const btn = document.getElementById('sendCodeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      statusEl.textContent = '';
+
       try {
+        await waitForAuth();
+        await Auth.sendOtpCode(email);
+        pendingOtpEmail = email;
+
+        // Show step 2
+        document.getElementById('otpStep2').style.display = 'block';
+        document.getElementById('otpHint').textContent = `A 6-digit code was sent to ${email}. Enter it below.`;
+        document.getElementById('otpCode').focus();
+        statusEl.textContent = '';
+      } catch (err) {
+        console.error('Send code error:', err);
+        statusEl.innerHTML = `<span style="color:#ef4444">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send 6-Digit Code';
+      }
+    }
+
+    async function handleVerifyCode() {
+      const code = document.getElementById('otpCode').value.trim();
+      const statusEl = document.getElementById('status');
+
+      if (!code || code.length !== 6) {
+        statusEl.textContent = 'Please enter the 6-digit code.';
+        return;
+      }
+
+      statusEl.textContent = 'Verifying…';
+
+      try {
+        await waitForAuth();
+        await Auth.verifyOtpCode(pendingOtpEmail, code);
+
+        statusEl.innerHTML = '<span style="color:#10b981">✓ Verified! Redirecting…</span>';
+        const next = sessionStorage.getItem('post_login_redirect') || './index.html';
+        sessionStorage.removeItem('post_login_redirect');
+        location.replace(next);
+      } catch (err) {
+        console.error('Verify code error:', err);
+        statusEl.innerHTML = `<span style="color:#ef4444">Invalid or expired code. Please try again.</span>`;
+        document.getElementById('otpCode').value = '';
+        document.getElementById('otpCode').focus();
+      }
+    }
+
+    function resetOtpFlow() {
+      pendingOtpEmail = null;
+      document.getElementById('otpStep2').style.display = 'none';
+      document.getElementById('otpCode').value = '';
+      document.getElementById('otpEmail').value = '';
+      document.getElementById('status').textContent = '';
+    }
+
+    // Allow pressing Enter on the code field to verify
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('otpCode').addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleVerifyCode();
+      });
+      document.getElementById('otpEmail').addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleSendCode();
+      });
+    });
+
+    (async () => {
+      try {
+        await waitForAuth();
         await Auth.initAuth();
         document.getElementById('loginBtn').addEventListener('click', () => Auth.login());
 

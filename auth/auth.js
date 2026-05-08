@@ -82,10 +82,36 @@
     }
   }
 
+  // Step 1: Send a 6-digit OTP code to the user's email (no magic link)
+  async function sendOtpCode(email) {
+    const sb = await getSupabase();
+    const { error } = await sb.auth.signInWithOtp({
+      email: email,
+      options: {
+        shouldCreateUser: false, // Only allow already-approved users to log in
+        // No emailRedirectTo → Supabase sends a 6-digit code instead of a link
+      }
+    });
+    if (error) throw error;
+  }
+
+  // Step 2: Verify the 6-digit code the user typed in the app
+  async function verifyOtpCode(email, token) {
+    const sb = await getSupabase();
+    const { error } = await sb.auth.verifyOtp({
+      email: email,
+      token: token,
+      type: 'email',
+    });
+    if (error) throw error;
+  }
+
   // Expose API
   window.Auth = {
     initAuth,
     login,
+    sendOtpCode,
+    verifyOtpCode,
     logout,
     isAuthenticated,
     getUser,
