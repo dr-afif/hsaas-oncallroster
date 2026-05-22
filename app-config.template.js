@@ -5,7 +5,7 @@ window.APP_CONFIG = {
 };
 
 // Centralized Version Control
-window.APP_VERSION = "2.3.0"; // Current stable version
+window.APP_VERSION = "2.4.0"; // Current stable version
 
 document.addEventListener("DOMContentLoaded", () => {
   const versionEls = document.querySelectorAll('#app-version-display');

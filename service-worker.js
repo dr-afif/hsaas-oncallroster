@@ -1,4 +1,4 @@
-const CACHE_NAME = "roster-cache-v20"; // Bumped for v2.3.0 updates
+const CACHE_NAME = "roster-cache-v22"; // Bumped for v2.3.1 PWA install update
 const urlsToCache = [
   "./",
   "./app-config.js",
@@ -16,7 +16,8 @@ const urlsToCache = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./offline.html"
+  "./offline.html",
+  "./pwa-install.js"
 ];
 
 // ---- Install: precache essential assets (best-effort) ----
