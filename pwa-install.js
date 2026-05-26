@@ -375,7 +375,7 @@
     }
 
     // C. Inject header install button next to theme toggle (if header brand exists)
-    const headerBrand = document.querySelector('.header-brand');
+    const headerBrand = document.querySelector('.header-top');
     if (headerBrand && !document.getElementById('pwa-install-btn')) {
       const installBtn = document.createElement('button');
       installBtn.id = 'pwa-install-btn';
