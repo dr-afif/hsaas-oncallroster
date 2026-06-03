@@ -168,7 +168,7 @@ async function loadDashboard() {
     const [rosterRes, deptsRes, allContactsRes] = await Promise.all([
       sb.from('view_roster_merged').select('*').eq('date', dateStr).neq('department_id', 'ADMIN').order('slot_order', { ascending: true }),
       sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('order_index', { ascending: true }),
-      sb.from('contacts').select('short_name, phone_number, department_id').eq('active', true)
+      sb.from('contacts').select('full_name, phone_number, department_id, short_name').eq('active', true).neq('department_id', 'ADMIN').order('short_name')
     ]);
 
     if (rosterRes.error) throw rosterRes.error;
@@ -198,6 +198,13 @@ async function loadDashboard() {
     localStorage.setItem('dept_order_cache', JSON.stringify(orderedDepts));
     localStorage.setItem('dept_names_cache', JSON.stringify(deptNames));
     localStorage.setItem('contacts_cache_map', JSON.stringify(contactMap));
+    
+    // Seed contacts page cache instantly (Zero-cost warmup)
+    if (allContactsRes.data) {
+      localStorage.setItem('contacts_cache', JSON.stringify(allContactsRes.data));
+      localStorage.setItem('contacts_order_cache', JSON.stringify(orderedDepts));
+      localStorage.setItem('contacts_names_cache', JSON.stringify(deptNames));
+    }
 
     console.log(`Received ${rosterRes.data.length} rows for ${dateStr}`);
 
@@ -242,6 +249,9 @@ async function loadDashboard() {
       showError(err.message || 'Failed to connect to roster database.');
     }
   }
+
+  // Run background warmup for other pages after Home is done
+  runBackgroundWarmup();
 }
 
 // --- Search & Filtering ---
@@ -643,3 +653,63 @@ window.addEventListener('scroll', () => {
     fab.classList.add('hidden-fab');
   }
 });
+
+// --- Background Warmup ---
+function runBackgroundWarmup() {
+  if (sessionStorage.getItem('warmup_done')) {
+    console.log("[Warmup] skipped reason: already done in this session");
+    return;
+  }
+  
+  if (!window.caches) {
+    console.log("[Warmup] skipped reason: caches API unsupported");
+    return;
+  }
+  
+  if (!navigator.onLine) {
+    console.log("[Warmup] skipped reason: offline");
+    return;
+  }
+
+  sessionStorage.setItem('warmup_done', 'true');
+  console.log("[Warmup] started");
+
+  const warmupTask = async () => {
+    try {
+      const cache = await caches.open('roster-cache-v23'); // must match SW cache name
+      
+      const assetsToWarmup = [
+        './contacts.html',
+        './contacts.css',
+        './contacts.js',
+        './fileviewer.html',
+        './fileviewer_style.css',
+        './fileviewer.js',
+        './navbar.css',
+        './app-config.js',
+        './auth/auth.js',
+        './hsaas-logo.png',
+        './manifest.json'
+      ];
+
+      // Add all to cache silently
+      await cache.addAll(assetsToWarmup);
+      
+      console.log("[Warmup] cached contacts assets");
+      console.log("[Warmup] cached files assets");
+      console.log("[Warmup] completed");
+      localStorage.setItem('warmup_last_success', Date.now().toString());
+
+    } catch (err) {
+      console.warn("[Warmup] failed:", err);
+      // Fails silently, does not break app
+    }
+  };
+
+  // Run when browser is idle to prevent blocking UI thread
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => warmupTask());
+  } else {
+    setTimeout(warmupTask, 1500);
+  }
+}
