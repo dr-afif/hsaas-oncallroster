@@ -17,7 +17,21 @@
       throw new Error("Supabase config missing in APP_CONFIG.");
     }
 
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    function cleanConfigVal(val) {
+      if (!val) return '';
+      let cleaned = String(val).trim();
+      cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+      return cleaned.trim();
+    }
+
+    const url = cleanConfigVal(SUPABASE_URL);
+    const key = cleanConfigVal(SUPABASE_ANON_KEY);
+
+    if (!url || !key) {
+      throw new Error("Supabase URL or Key is empty after sanitization.");
+    }
+
+    supabaseClient = window.supabase.createClient(url, key);
     return supabaseClient;
   }
 

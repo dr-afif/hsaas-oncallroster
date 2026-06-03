@@ -7,8 +7,15 @@ let sbClient = null;
 async function getSupabase() {
   if (sbClient) return sbClient;
 
-  const url = window.APP_CONFIG?.SUPABASE_URL;
-  const key = window.APP_CONFIG?.SUPABASE_ANON_KEY;
+  function cleanConfigVal(val) {
+    if (!val) return '';
+    let cleaned = String(val).trim();
+    cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+    return cleaned.trim();
+  }
+
+  const url = cleanConfigVal(window.APP_CONFIG?.SUPABASE_URL);
+  const key = cleanConfigVal(window.APP_CONFIG?.SUPABASE_ANON_KEY);
 
   if (!url || !key || url.includes('PLACEHOLDER')) {
     throw new Error("Supabase configuration is missing.");

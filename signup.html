@@ -171,7 +171,22 @@
         return;
       }
 
-      sb = window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+      function cleanConfigVal(val) {
+        if (!val) return '';
+        let cleaned = String(val).trim();
+        cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+        return cleaned.trim();
+      }
+
+      const url = cleanConfigVal(window.APP_CONFIG.SUPABASE_URL);
+      const key = cleanConfigVal(window.APP_CONFIG.SUPABASE_ANON_KEY);
+
+      if (!url || !key) {
+        document.getElementById('status').innerHTML = '<span class="error-msg">Supabase URL or Key is empty after sanitization.</span>';
+        return;
+      }
+
+      sb = window.supabase.createClient(url, key);
 
       try {
         const { data, error } = await sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('name');
