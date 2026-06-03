@@ -82,13 +82,13 @@
 
           // Show the page only if authenticated and authorized
           Auth.populateUserInfo();
-          document.body.classList.add('ready');
+          document.documentElement.classList.add('ready');
           console.log('[Perf] Auth resolved:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
         }
       } catch (err) {
         console.error("Auth Guard error:", err);
         // Fallback to show page if auth fails unexpectedly
-        document.body.classList.add('ready');
+        document.documentElement.classList.add('ready');
       }
     })();
   </script>

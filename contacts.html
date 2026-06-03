@@ -77,12 +77,12 @@
 
           // Show the page only if authenticated
           Auth.populateUserInfo();
-          document.body.classList.add('ready');
+          document.documentElement.classList.add('ready');
           console.log('[Perf] Auth resolved:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
         }
       } catch (err) {
         console.error("Auth Guard error:", err);
-        document.body.classList.add('ready');
+        document.documentElement.classList.add('ready');
       }
     })();
   </script>
