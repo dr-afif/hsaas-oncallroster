@@ -103,6 +103,7 @@ function hideLoader() {
 
 // Polling for GAPI to load
 async function startGapi() {
+  if(window.PerfTracker) window.PerfTracker.start("Google API load time");
   console.log("🧐 Checking for GAPI...");
   let tries = 0;
   while (typeof gapi === 'undefined' || !gapi.load) {
@@ -125,6 +126,7 @@ async function initializeGapiClient() {
       apiKey: API_KEY,
       discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
     });
+    if(window.PerfTracker) window.PerfTracker.end("Google API load time");
     console.log("👉 Drive API ready");
     // On page load: Restore the last folder from the stack
     const currentFolder = folderStack[folderStack.length - 1];
@@ -151,6 +153,7 @@ async function listFiles(folderId) {
 
   // 📡 2. Fetch fresh data from Google Drive in the background
   try {
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     console.log(`📂 Fetching live files for folder: ${folderId}`);
     const response = await gapi.client.drive.files.list({
       q: `'${folderId}' in parents and trashed=false`, // Use live ID here
@@ -160,6 +163,7 @@ async function listFiles(folderId) {
     });
 
     const files = response.result.files || [];
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     console.log(`✅ Received ${files.length} fresh files`);
 
     // --- Custom Sorting Logic ---
@@ -229,6 +233,7 @@ async function listFiles(folderId) {
 }
 
 function renderFilesUI(files) {
+  if(window.PerfTracker) window.PerfTracker.start("File list rendering time");
   fileList.innerHTML = "";
 
   if (files.length === 0) {
@@ -286,6 +291,11 @@ function renderFilesUI(files) {
     }
     fileList.appendChild(div);
   });
+  
+  if(window.PerfTracker) {
+    window.PerfTracker.end("File list rendering time");
+    window.PerfTracker.print();
+  }
 }
 
 function enterFolder(folder) {

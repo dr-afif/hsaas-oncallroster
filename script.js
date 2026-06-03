@@ -30,7 +30,9 @@ async function getSupabase() {
     throw new Error("Supabase SDK failed to load. Check your internet connection or script tags.");
   }
 
+  if(window.PerfTracker) window.PerfTracker.start("Supabase init time");
   sbClient = window.supabase.createClient(url, key);
+  if(window.PerfTracker) window.PerfTracker.end("Supabase init time");
   return sbClient;
 }
 
@@ -158,12 +160,14 @@ async function loadDashboard() {
     const sb = await getSupabase();
     console.log("Fetching roster for:", dateStr);
 
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     const [rosterRes, deptsRes, allContactsRes] = await Promise.all([
       sb.from('view_roster_merged').select('*').eq('date', dateStr).neq('department_id', 'ADMIN').order('slot_order', { ascending: true }),
       sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('order_index', { ascending: true }),
       sb.from('contacts').select('short_name, phone_number, department_id').eq('active', true)
     ]);
 
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     if (rosterRes.error) throw rosterRes.error;
     if (deptsRes.error) throw deptsRes.error;
     if (allContactsRes.error) console.warn("Contacts fetch failed", allContactsRes.error);
@@ -344,6 +348,7 @@ function renderDashboard(data, sourceLabel, query = '') {
   });
 
   container.innerHTML = html || `<p class="p-8 text-center text-muted">No results found for "${query}"</p>`;
+  if(window.PerfTracker) window.PerfTracker.print();
 }
 
 function renderDoctorRow(name, phone) {

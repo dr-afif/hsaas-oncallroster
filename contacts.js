@@ -22,7 +22,9 @@ async function getSupabase() {
     }
   }
 
+  if(window.PerfTracker) window.PerfTracker.start("Supabase init time");
   sbClient = window.supabase.createClient(url, key);
+  if(window.PerfTracker) window.PerfTracker.end("Supabase init time");
   return sbClient;
 }
 
@@ -80,6 +82,7 @@ async function fetchContacts() {
   try {
     const sb = await getSupabase();
 
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     // 2. Fetch Roster Month ID for target month
     const { data: rmData } = await sb.from('roster_months').select('id').eq('month', targetMonth);
     const rmIds = (rmData || []).map(rm => rm.id);
@@ -104,6 +107,7 @@ async function fetchContacts() {
       sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('order_index', { ascending: true })
     ]);
 
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     if (contactsRes.error) throw contactsRes.error;
     if (deptsRes.error) throw deptsRes.error;
 
@@ -147,8 +151,12 @@ function handleSearch() {
 }
 
 function renderDepartments(data, query = '') {
+  if(window.PerfTracker) window.PerfTracker.start("Contact rendering time");
   const container = document.getElementById('departments');
-  if (!container) return;
+  if (!container) {
+    if(window.PerfTracker) window.PerfTracker.end("Contact rendering time");
+    return;
+  }
 
   if (!data || !data.length) {
     container.innerHTML = '<p class="p-8 text-center text-muted">No contacts found.</p>';
@@ -195,6 +203,10 @@ function renderDepartments(data, query = '') {
     }
   });
   container.innerHTML = html || `<p class="p-8 text-center text-muted">No results found for "${query}"</p>`;
+  if(window.PerfTracker) {
+    window.PerfTracker.end("Contact rendering time");
+    window.PerfTracker.print();
+  }
 }
 
 function toggleDept(el) {

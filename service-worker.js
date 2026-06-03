@@ -1,4 +1,4 @@
-const CACHE_NAME = "roster-cache-v15"; // Bumped to force config.js refresh
+const CACHE_NAME = "roster-cache-v16"; // Bumped to force config.js refresh and new HTML strategy
 const urlsToCache = [
   "./",
   "./config.js",
@@ -92,20 +92,18 @@ self.addEventListener("fetch", (event) => {
 
   if (isHTML) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          // Update cache copy for offline
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request).then((networkResponse) => {
           if (networkResponse && networkResponse.ok) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse.clone()));
           }
           return networkResponse;
-        })
-        .catch(async () => {
-          // Offline: serve cached page, else offline.html
-          const cached = await caches.match(request);
-          return cached || caches.match("./offline.html");
-        })
+        }).catch(() => null);
+        
+        event.waitUntil(fetchPromise);
+        
+        return cachedResponse || fetchPromise.then(res => res || caches.match("./offline.html"));
+      })
     );
     return;
   }
