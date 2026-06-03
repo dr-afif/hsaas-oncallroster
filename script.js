@@ -147,7 +147,7 @@ async function loadDashboard() {
       window._orderedDepts = JSON.parse(localStorage.getItem('dept_order_cache') || '[]');
       window._deptNames = JSON.parse(localStorage.getItem('dept_names_cache') || '{}');
       allContactsMap = JSON.parse(localStorage.getItem('contacts_cache_map') || '{}');
-      renderDashboard(data, "📂 Supabase (Cached)");
+      renderDashboard(data, "🔄 Using cached data...");
       lastDataHash = JSON.stringify(data);
     } catch (e) {
       console.warn("Cache fail", e);
@@ -196,16 +196,18 @@ async function loadDashboard() {
     localStorage.setItem('dept_names_cache', JSON.stringify(deptNames));
     localStorage.setItem('contacts_cache_map', JSON.stringify(contactMap));
 
-    console.log(`Received ${rosterRes.data.length} rows for ${dateStr}`);
-
+    console.log(`Received ${rosterRes.data.length} rows`);
     const freshHash = JSON.stringify(data);
     if (freshHash !== lastDataHash) {
-      renderDashboard(data, "📂 Supabase (Live)");
+      renderDashboard(data, "✨ Updated with new data");
       localStorage.setItem(cacheKey, freshHash);
       lastDataHash = freshHash;
     } else {
       const sourceEl = document.getElementById("data-source");
-      if (sourceEl) sourceEl.textContent = "📂 Supabase (Up to date)";
+      if (sourceEl) {
+        sourceEl.textContent = "✅ Updated just now";
+        setTimeout(() => { sourceEl.style.opacity = '0.5'; }, 2000); // subtle fade
+      }
     }
 
     if (data.length === 0) {

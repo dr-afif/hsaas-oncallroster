@@ -68,14 +68,17 @@ async function fetchContacts() {
   const targetMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
   // 2. Try Cache
-  const cached = localStorage.getItem('contacts_cache');
-  if (cached) {
+  const cachedData = localStorage.getItem('contacts_cache');
+  if (cachedData) {
     try {
-      allContactsData = JSON.parse(cached);
+      const data = JSON.parse(cachedData);
+      allContactsData = data;
       window._orderedDepts = JSON.parse(localStorage.getItem('contacts_order_cache') || '[]');
       window._deptNames = JSON.parse(localStorage.getItem('contacts_names_cache') || '{}');
-      renderDepartments(allContactsData);
-      lastContactsHash = JSON.stringify(allContactsData);
+      renderDepartments(data);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "🔄 Using cached data...";
+      lastDataHash = JSON.stringify(data);
     } catch (e) { }
   }
 
@@ -113,7 +116,7 @@ async function fetchContacts() {
 
     // 4. Filter contacts based on roster
     const rawData = contactsRes.data;
-    const filteredData = rawData.filter(c => {
+    const data = rawData.filter(c => {
       const name = (c.short_name || '').toLowerCase();
       return activeNames.has(name);
     });
@@ -130,16 +133,25 @@ async function fetchContacts() {
     localStorage.setItem('contacts_order_cache', JSON.stringify(orderedDepts));
     localStorage.setItem('contacts_names_cache', JSON.stringify(deptNames));
 
-    const freshHash = JSON.stringify(filteredData);
-    if (freshHash !== lastContactsHash) {
-      allContactsData = filteredData;
-      renderDepartments(filteredData);
+    // Update UI Only if data changed
+    const freshHash = JSON.stringify(data);
+    if (freshHash !== lastDataHash) {
+      allContactsData = data;
+      renderDepartments(data);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "✨ Updated with new data";
       localStorage.setItem('contacts_cache', freshHash);
-      lastContactsHash = freshHash;
+      lastDataHash = freshHash;
+    } else {
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) {
+        sourceEl.textContent = "✅ Updated just now";
+        setTimeout(() => { sourceEl.style.opacity = '0.5'; }, 2000); // subtle fade
+      }
     }
   } catch (err) {
     console.error("Contacts Load Error:", err);
-    if (!lastContactsHash) {
+    if (!lastDataHash) {
       showError(err.message || 'Failed to load contacts.');
     }
   }

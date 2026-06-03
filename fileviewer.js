@@ -49,17 +49,25 @@ function getSavedFolderId() {
 }
 
 /**
- * Caches a folder's file list in sessionStorage
+ * Caches a folder's file list in localStorage
  */
-function setFilesToCache(folderId, files) {
-  sessionStorage.setItem(`cache_files_${folderId}`, JSON.stringify(files));
+function saveFilesToCache(folderId, files) {
+  const cacheKey = `gdrive_folder_${folderId}`;
+  localStorage.setItem(cacheKey, JSON.stringify(files));
+}
+
+function getCacheTimestamp(folderId) {
+  return localStorage.getItem(`gdrive_folder_time_${folderId}`);
+}
+function setCacheTimestamp(folderId) {
+  localStorage.setItem(`gdrive_folder_time_${folderId}`, Date.now().toString());
 }
 
 /**
  * Retrieves a folder's file list from sessionStorage
  */
 function getFilesFromCache(folderId) {
-  const saved = sessionStorage.getItem(`cache_files_${folderId}`);
+  const saved = localStorage.getItem(`gdrive_folder_${folderId}`);
   try {
     return saved ? JSON.parse(saved) : null;
   } catch (e) {
@@ -100,6 +108,16 @@ function hideLoader() {
   }
 }
 
+// INSTANT UI RENDER on script load
+document.addEventListener("DOMContentLoaded", () => {
+  const currentFolder = folderStack[folderStack.length - 1];
+  const cachedFiles = getFilesFromCache(currentFolder.id);
+  if (cachedFiles) {
+    console.log("⚡ INSTANT load from cache for", currentFolder.id);
+    renderFilesUI(cachedFiles);
+    updateBreadcrumb();
+  }
+});
 
 // Polling for GAPI to load
 async function startGapi() {
@@ -139,16 +157,14 @@ async function initializeGapiClient() {
 }
 
 async function listFiles(folderId) {
-  // ⚡ 1. Try to load from Cache first for immediate display
+  // Show loading state ONLY if we don't have cache
   const cachedFiles = getFilesFromCache(folderId);
-  if (cachedFiles) {
+  if (!cachedFiles) {
+    fileList.innerHTML = `<p class="p-8 text-center text-muted">Loading files...</p>`;
+  } else {
     console.log("⚡ Instant load from cache");
     renderFilesUI(cachedFiles);
     updateBreadcrumb();
-    hideLoader();
-  } else {
-    showLoader();
-    fileList.innerHTML = "";
   }
 
   // 📡 2. Fetch fresh data from Google Drive in the background
@@ -156,7 +172,7 @@ async function listFiles(folderId) {
     if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     console.log(`📂 Fetching live files for folder: ${folderId}`);
     const response = await gapi.client.drive.files.list({
-      q: `'${folderId}' in parents and trashed=false`, // Use live ID here
+      q: `'${folderId}' in parents and trashed=false`,
       orderBy: "folder,name desc",
       pageSize: 100,
       fields: "files(id, name, mimeType, webViewLink, iconLink, thumbnailLink)"
@@ -166,6 +182,14 @@ async function listFiles(folderId) {
     if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     console.log(`✅ Received ${files.length} fresh files`);
 
+    const freshHash = JSON.stringify(files);
+    const cachedHash = JSON.stringify(cachedFiles || []);
+
+    if (freshHash === cachedHash) {
+      console.log("No changes in Drive, skipping render.");
+      return; // Skip re-render entirely
+    }
+
     // --- Custom Sorting Logic ---
     const currentFolderName = folderStack[folderStack.length - 1]?.name || "";
     const isYearFolder = /^\d{4}$/.test(currentFolderName);
@@ -174,14 +198,11 @@ async function listFiles(folderId) {
       const isFolderA = a.mimeType === "application/vnd.google-apps.folder";
       const isFolderB = b.mimeType === "application/vnd.google-apps.folder";
 
-      // 1. Folders first
       if (isFolderA && !isFolderB) return -1;
       if (!isFolderA && isFolderB) return 1;
 
-      // 2. Month-based sorting
       const getMonthPriority = (name) => {
         const lower = name.toLowerCase().trim();
-        // Check for common month prefixes
         for (const [m, p] of Object.entries(MONTH_ORDER)) {
           if (lower.startsWith(m)) return p;
         }
@@ -192,34 +213,31 @@ async function listFiles(folderId) {
       const pB = getMonthPriority(b.name);
 
       if (pA !== null && pB !== null) {
-        if (pA !== pB) return pA - pB; // Chronological (Jan-Dec)
+        if (pA !== pB) return pA - pB;
       } else if (pA !== null) {
-        return -1; // Month folder before other folder/file
+        return -1;
       } else if (pB !== null) {
         return 1;
       }
 
-      // 3. Year-based sorting (Descending - 2026 before 2025)
       const isYearA = /^\d{4}$/.test(a.name);
       const isYearB = /^\d{4}$/.test(b.name);
       if (isYearA && isYearB) {
         return b.name.localeCompare(a.name);
       }
 
-      // 4. Fallback sorting
       if (isYearFolder) {
-        // Inside a year folder (like 2026), prefer ascending alphabetic for other items
         return a.name.localeCompare(b.name);
       }
 
-      // Maintain original "name desc" behavior for general content
       return b.name.localeCompare(a.name);
     });
 
-    // 💾 3. Update cache with fresh data
-    setFilesToCache(folderId, files);
+    // Save to Cache
+    saveFilesToCache(folderId, files);
+    setCacheTimestamp(folderId);
 
-    // 🎨 4. Render fresh data (UI updates smoothly)
+    // Re-render UI with fresh data
     renderFilesUI(files);
     updateBreadcrumb();
     hideLoader();
