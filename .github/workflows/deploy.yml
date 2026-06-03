@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Single deploy job since we're just deploying static files
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Create Production app-config.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          # Sanitize secrets
+          CLEAN_URL=$(echo "$SUPABASE_URL" | tr -d '\r\n[:space:]')
+          CLEAN_KEY=$(echo "$SUPABASE_ANON_KEY" | tr -d '\r\n[:space:]')
+
+          # Inject secrets into app-config.js using sed on the template file
+          cp app-config.template.js app-config.js
+          sed -i "s|{{SUPABASE_URL}}|$CLEAN_URL|" app-config.js
+          sed -i "s|{{SUPABASE_ANON_KEY}}|$CLEAN_KEY|" app-config.js
+          
+          if [ ! -s app-config.js ]; then
+            echo "❌ ERROR: app-config.js is empty or was not created."
+            exit 1
+          fi
+          echo "✅ app-config.js created successfully with secrets."
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload entire repository
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

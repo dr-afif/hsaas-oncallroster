@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Access — HSAAS On-Call Roster</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      background: #f9fafb;
+    }
+
+    .card {
+      padding: 2rem;
+      max-width: 440px;
+      width: 92vw;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .06);
+      background: #fff;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.3rem;
+    }
+
+    p {
+      color: #555;
+      font-size: 0.95rem;
+      margin: 0 0 1rem;
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 99px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+    }
+
+    .badge-expired {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .badge-pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-revoked {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .renewal-form {
+      text-align: left;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 1.25rem;
+      margin-top: 0.5rem;
+    }
+
+    .renewal-form label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+      color: #374151;
+    }
+
+    .renewal-form select {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #fff;
+      margin-bottom: 0.75rem;
+      box-sizing: border-box;
+    }
+
+    button {
+      padding: 0.7rem 1.25rem;
+      border-radius: 10px;
+      border: 0;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: #000;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: #6b7280;
+      font-size: 0.85rem;
+    }
+
+    #status {
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+      min-height: 1.4em;
+    }
+
+    .ok {
+      color: #10b981;
+    }
+
+    .err {
+      color: #ef4444;
+    }
+
+    .loading {
+      color: #9ca3af;
+    }
+  </style>
+
+  <script src="app-config.js?v=2.4.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="./auth/auth.js?v=2.4.0"></script>
+</head>
+
+<body>
+  <div class="card" id="card">
+    <p class="loading">Checking your access status…</p>
+  </div>
+
+  <script>
+    let sb = null;
+    let userEmail = null;
+
+    async function init() {
+      // Wait for Auth to load
+      if (!window.Auth) {
+        await new Promise((resolve, reject) => {
+          let tries = 0;
+          const iv = setInterval(() => {
+            if (window.Auth) { clearInterval(iv); resolve(); }
+            else if (++tries > 300) { clearInterval(iv); reject(new Error("Auth not loaded")); }
+          }, 20);
+        });
+      }
+
+      sb = await Auth.initAuth();
+      const authed = await Auth.isAuthenticated();
+      if (!authed) {
+        location.replace('./login.html');
+        return;
+      }
+
+      const user = await Auth.getUser();
+      userEmail = user?.email;
+      if (!userEmail) { location.replace('./login.html'); return; }
+
+      // Look up their access request record
+      const { data, error } = await sb
+        .from('viewer_access_requests')
+        .select('status, expires_at, duration_months, full_name')
+        .eq('email', userEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        // No record at all → send to signup
+        location.replace('./signup.html');
+        return;
+      }
+
+      const now = new Date();
+      const isExpired = data.status === 'approved' && new Date(data.expires_at) <= now;
+
+      if (isExpired) {
+        renderExpired(data);
+      } else if (data.status === 'pending') {
+        renderPending();
+      } else if (data.status === 'revoked' || data.status === 'rejected') {
+        renderRevoked(data.status);
+      } else {
+        // Status is approved and not expired — they should have access, send them home
+        location.replace('./index.html');
+      }
+    }
+
+    function renderExpired(data) {
+      const expiryDate = new Date(data.expires_at).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' });
+      document.getElementById('card').innerHTML = `
+        <div class="icon">⏰</div>
+        <h2>Your Access Has Expired</h2>
+        <span class="badge badge-expired">Expired</span>
+        <p>Your temporary access for <strong>${escapeHTML(userEmail)}</strong> expired on <strong>${expiryDate}</strong>.</p>
+        <p>You can submit a renewal request below. An admin will review and approve it.</p>
+
+        <div class="renewal-form">
+          <label for="renewDuration">Renewal Duration</label>
+          <select id="renewDuration">
+            <option value="1">1 Month</option>
+            <option value="3">3 Months</option>
+            <option value="6">6 Months</option>
+            <option value="12">12 Months</option>
+          </select>
+          <button class="btn-primary" onclick="submitRenewal()">Request Renewal</button>
+        </div>
+
+        <div id="status"></div>
+        <button class="btn-ghost" onclick="Auth.logout()">Logout</button>
+      `;
+    }
+
+    function renderPending() {
+      document.getElementById('card').innerHTML = `
+        <div class="icon">🕐</div>
+        <h2>Request Pending Approval</h2>
+        <span class="badge badge-pending">Pending</span>
+        <p>Your access request is currently <strong>awaiting admin approval</strong>.</p>
+        <p>You'll be able to log in once an administrator approves your request. Please check back later.</p>
+        <button class="btn-primary" onclick="location.reload()">Check Again</button>
+        <button class="btn-ghost" onclick="Auth.logout()">Logout</button>
+      `;
+    }
+
+    function renderRevoked(status) {
+      document.getElementById('card').innerHTML = `
+        <div class="icon">🚫</div>
+        <h2>Access ${status === 'revoked' ? 'Revoked' : 'Not Approved'}</h2>
+        <span class="badge badge-revoked">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+        <p>Your access to the HSAAS On-Call Roster has been ${status}.</p>
+        <p>If you believe this is an error, please contact the Oncall Roster App administrator directly.</p>
+        <button class="btn-ghost" onclick="Auth.logout()">Logout</button>
+      `;
+    }
+
+    async function submitRenewal() {
+      const duration = parseInt(document.getElementById('renewDuration').value, 10);
+      const statusEl = document.getElementById('status');
+      const btn = document.querySelector('.btn-primary');
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      statusEl.textContent = '';
+
+      try {
+        // Update the existing record: reset to 'pending' with new duration
+        const { error } = await sb
+          .from('viewer_access_requests')
+          .update({
+            status: 'pending',
+            duration_months: duration,
+            expires_at: null,
+            approved_at: null,
+            approved_by: null
+          })
+          .eq('email', userEmail)
+          .eq('status', 'approved'); // Safety: only update the approved-but-expired row
+
+        if (error) throw error;
+
+        statusEl.innerHTML = '<span class="ok">✓ Renewal request submitted! An admin will review it shortly.</span>';
+        btn.textContent = 'Request Sent';
+      } catch (err) {
+        console.error('Renewal error:', err);
+        statusEl.innerHTML = `<span class="err">${err.message || 'Failed to submit renewal.'}</span>`;
+        btn.disabled = false;
+        btn.textContent = 'Request Renewal';
+      }
+    }
+
+    function escapeHTML(str) {
+      return String(str ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    init().catch(err => {
+      console.error('Access denied page error:', err);
+      document.getElementById('card').innerHTML = `<p class="err">Something went wrong. <a href="./login.html">Try logging in again.</a></p>`;
+    });
+  </script>
+</body>
+
+</html>

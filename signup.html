@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Request Access — HSAAS On-Call Roster</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      display: grid;
+      min-height: 100dvh;
+      place-items: center;
+      background: #f9fafb;
+    }
+
+    .card {
+      padding: 2rem;
+      max-width: 450px;
+      width: 92vw;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .06);
+    }
+
+    h1 {
+      margin: 0 0 .5rem;
+      font-size: 1.4rem;
+    }
+
+    p {
+      color: #555;
+      margin: 0 0 1.25rem;
+      font-size: 0.95rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: #374151;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    button {
+      padding: .75rem 1rem;
+      border-radius: 10px;
+      border: 0;
+      cursor: pointer;
+      font-weight: 600;
+      width: 100%;
+      margin-top: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .primary {
+      background: #000;
+      color: #fff;
+    }
+
+    .primary:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .link-btn {
+      background: transparent;
+      color: #3b82f6;
+      text-decoration: underline;
+      margin-top: 1rem;
+    }
+
+    #status {
+      margin-top: 1rem;
+      color: #666;
+      font-size: .9rem;
+      text-align: center;
+      min-height: 1.5em;
+    }
+
+    .success-msg {
+      color: #10b981;
+      font-weight: 500;
+    }
+
+    .error-msg {
+      color: #ef4444;
+      font-weight: 500;
+    }
+  </style>
+
+  <script src="app-config.js?v=2.4.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+  <div class="card">
+    <h1>Request Viewer Access</h1>
+    <p>Fill out this form if you have a temporary <strong>@upm.edu.my</strong> account (e.g., Master student) and cannot
+      use Google Sign-in.</p>
+
+    <form id="signupForm" onsubmit="submitRequest(event)">
+      <div class="form-group">
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" required placeholder="John Doe">
+      </div>
+
+      <div class="form-group">
+        <label for="email">UPM Email Address</label>
+        <input type="email" id="email" required placeholder="@upm.edu.my or @student.upm.edu.my"
+          pattern=".+@(student\.)?upm\.edu\.my$" title="Must be a @upm.edu.my or @student.upm.edu.my email address">
+      </div>
+
+      <div class="form-group">
+        <label for="departmentId">Primary Department</label>
+        <select id="departmentId" required>
+          <option value="" disabled selected>Loading departments...</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="duration">Requested Duration</label>
+        <select id="duration" required>
+          <option value="1">1 Month</option>
+          <option value="3">3 Months</option>
+          <option value="6">6 Months</option>
+          <option value="12">12 Months</option>
+        </select>
+      </div>
+
+      <button type="submit" id="submitBtn" class="primary">Submit Request</button>
+      <button type="button" class="link-btn" onclick="location.href='login.html'">Back to Login</button>
+    </form>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    let sb = null;
+
+    async function init() {
+      if (!window.APP_CONFIG || !window.APP_CONFIG.SUPABASE_URL) {
+        document.getElementById('status').innerHTML = '<span class="error-msg">Config missing. Cannot initialize database.</span>';
+        return;
+      }
+
+      function cleanConfigVal(val) {
+        if (!val) return '';
+        let cleaned = String(val).trim();
+        cleaned = cleaned.replace(/^['"]|['"]$/g, '');
+        return cleaned.trim();
+      }
+
+      const url = cleanConfigVal(window.APP_CONFIG.SUPABASE_URL);
+      const key = cleanConfigVal(window.APP_CONFIG.SUPABASE_ANON_KEY);
+
+      if (!url || !key) {
+        document.getElementById('status').innerHTML = '<span class="error-msg">Supabase URL or Key is empty after sanitization.</span>';
+        return;
+      }
+
+      sb = window.supabase.createClient(url, key);
+
+      try {
+        const { data, error } = await sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('name');
+        if (error) throw error;
+
+        const select = document.getElementById('departmentId');
+        if (data && data.length > 0) {
+          select.innerHTML = '<option value="" disabled selected>Select a department</option>' +
+            data.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+        } else {
+          select.innerHTML = '<option value="" disabled>No departments found</option>';
+        }
+      } catch (err) {
+        console.error("Failed to load depts:", err);
+        document.getElementById('departmentId').innerHTML = '<option value="" disabled>Error loading departments</option>';
+      }
+    }
+
+    async function submitRequest(e) {
+      e.preventDefault();
+
+      const btn = document.getElementById('submitBtn');
+      const statusEl = document.getElementById('status');
+
+      const fullName = document.getElementById('fullName').value.trim();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const departmentId = document.getElementById('departmentId').value;
+      const duration = parseInt(document.getElementById('duration').value, 10);
+
+      if (!email.endsWith('@upm.edu.my') && !email.endsWith('@student.upm.edu.my')) {
+        statusEl.innerHTML = '<span class="error-msg">You must use a @upm.edu.my or @student.upm.edu.my email.</span>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      statusEl.innerHTML = '';
+
+      try {
+        // First check if an active request already exists
+        const { data: existing, error: fetchErr } = await sb
+          .from('viewer_access_requests')
+          .select('status')
+          .eq('email', email)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          if (existing[0].status === 'pending') {
+            throw new Error("You already have a pending request. Please wait for admin approval.");
+          } else if (existing[0].status === 'approved') {
+            throw new Error("You already have an approved active account! Go back to login.");
+          }
+        }
+
+        const { error } = await sb.from('viewer_access_requests').insert({
+          full_name: fullName,
+          email: email,
+          department_id: departmentId,
+          duration_months: duration,
+          status: 'pending'
+        });
+
+        if (error) throw error;
+
+        document.getElementById('signupForm').reset();
+        statusEl.innerHTML = '<span class="success-msg">Request submitted successfully! An admin will review it shortly.</span>';
+
+      } catch (err) {
+        console.error("Submit error:", err);
+        statusEl.innerHTML = `<span class="error-msg">${err.message || 'Failed to submit request.'}</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Request';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+
+</html>
