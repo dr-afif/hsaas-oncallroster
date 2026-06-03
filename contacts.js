@@ -80,6 +80,8 @@ async function fetchContacts() {
       window._orderedDepts = JSON.parse(localStorage.getItem('contacts_order_cache') || '[]');
       window._deptNames = JSON.parse(localStorage.getItem('contacts_names_cache') || '{}');
       renderDepartments(allContactsData);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "🔄 Using cached data...";
       lastContactsHash = JSON.stringify(allContactsData);
     } catch (e) { }
   }
@@ -113,8 +115,16 @@ async function fetchContacts() {
     if (freshHash !== lastContactsHash) {
       allContactsData = filteredData;
       renderDepartments(filteredData);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "✨ Updated with new data";
       localStorage.setItem('contacts_cache', freshHash);
       lastContactsHash = freshHash;
+    } else {
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) {
+        sourceEl.textContent = "✅ Updated just now";
+        setTimeout(() => { sourceEl.style.opacity = '0.5'; }, 2000); // subtle fade
+      }
     }
   } catch (err) {
     console.error("Contacts Load Error:", err);

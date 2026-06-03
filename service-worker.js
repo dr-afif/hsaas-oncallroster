@@ -1,4 +1,4 @@
-const CACHE_NAME = "roster-cache-v22"; // Bumped for v2.3.1 PWA install update
+const CACHE_NAME = "roster-cache-v23"; // Bumped for stale-while-revalidate update
 const urlsToCache = [
   "./",
   "./app-config.js",
@@ -81,20 +81,22 @@ self.addEventListener("fetch", (event) => {
 
   if (isHTML) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          // Update cache copy for offline
-          if (networkResponse && networkResponse.ok) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return networkResponse;
-        })
-        .catch(async () => {
-          // Offline: serve cached page, else offline.html
-          const cached = await caches.match(request);
-          return cached || caches.match("./offline.html");
-        })
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.ok) {
+              const copy = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return networkResponse;
+          })
+          .catch(() => {
+            // Offline fallback
+            return caches.match("./offline.html");
+          });
+
+        return cachedResponse || fetchPromise;
+      })
     );
     return;
   }

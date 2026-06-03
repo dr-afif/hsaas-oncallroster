@@ -17,14 +17,31 @@
       opacity: 0;
     }
 
-    body.ready {
+    html.ready body, body.ready {
       visibility: visible;
       opacity: 1;
       transition: opacity 0.2s ease-in;
     }
   </style>
 
+  <script>window.perfMarks = { start: performance.now() };</script>
+  <link rel="prefetch" href="index.html">
+  <link rel="prefetch" href="contacts.html">
+
   <script src="app-config.js?v=2.4.0"></script>
+  <script>
+    if (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_URL && !window.APP_CONFIG.SUPABASE_URL.includes('PLACEHOLDER')) {
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = new URL(window.APP_CONFIG.SUPABASE_URL).origin;
+      document.head.appendChild(link);
+    }
+    const fastAuthExp = sessionStorage.getItem('fast_auth_expires');
+    if (fastAuthExp && Date.now() < parseInt(fastAuthExp, 10)) {
+      document.documentElement.classList.add('ready');
+      console.log('[Perf] Fast auth hit:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
+    }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="./auth/auth.js"></script>
   <script src="pwa-install.js?v=2.4.0" defer></script>
@@ -43,11 +60,13 @@
         await Auth.initAuth();
         let authed = await Auth.isAuthenticated();
         if (!authed) {
+          sessionStorage.removeItem('fast_auth_expires');
           // Store current path for redirect after login
           const ret = location.pathname + location.search + location.hash;
           sessionStorage.setItem('post_login_redirect', ret);
           location.replace('./login.html');
         } else {
+          sessionStorage.setItem('fast_auth_expires', Date.now() + 10 * 60 * 1000);
           const sb = await Auth.initAuth();
           const { data: hasAccess, error } = await sb.rpc('check_viewer_access');
           
@@ -59,6 +78,7 @@
           // Show the page only if authenticated
           Auth.populateUserInfo();
           document.body.classList.add('ready');
+          console.log('[Perf] Auth resolved:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
         }
       } catch (err) {
         console.error("Auth Guard error:", err);

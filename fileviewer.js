@@ -49,17 +49,25 @@ function getSavedFolderId() {
 }
 
 /**
- * Caches a folder's file list in sessionStorage
+ * Caches a folder's file list in localStorage
  */
-function setFilesToCache(folderId, files) {
-  sessionStorage.setItem(`cache_files_${folderId}`, JSON.stringify(files));
+function saveFilesToCache(folderId, files) {
+  const cacheKey = `gdrive_folder_${folderId}`;
+  localStorage.setItem(cacheKey, JSON.stringify(files));
+}
+
+function getCacheTimestamp(folderId) {
+  return localStorage.getItem(`gdrive_folder_time_${folderId}`);
+}
+function setCacheTimestamp(folderId) {
+  localStorage.setItem(`gdrive_folder_time_${folderId}`, Date.now().toString());
 }
 
 /**
- * Retrieves a folder's file list from sessionStorage
+ * Retrieves a cached file list from localStorage
  */
 function getFilesFromCache(folderId) {
-  const saved = sessionStorage.getItem(`cache_files_${folderId}`);
+  const saved = localStorage.getItem(`gdrive_folder_${folderId}`);
   try {
     return saved ? JSON.parse(saved) : null;
   } catch (e) {
@@ -100,6 +108,17 @@ function hideLoader() {
   }
 }
 
+
+// INSTANT UI RENDER on script load
+document.addEventListener("DOMContentLoaded", () => {
+  const currentFolder = folderStack[folderStack.length - 1];
+  const cachedFiles = getFilesFromCache(currentFolder.id);
+  if (cachedFiles) {
+    console.log("⚡ INSTANT load from cache for", currentFolder.id);
+    renderFilesUI(cachedFiles);
+    updateBreadcrumb();
+  }
+});
 
 // Polling for GAPI to load
 async function startGapi() {
@@ -144,16 +163,14 @@ async function initializeGapiClient() {
 }
 
 async function listFiles(folderId) {
-  // ⚡ 1. Try to load from Cache first for immediate display
+  // Show loading state ONLY if we don't have cache
   const cachedFiles = getFilesFromCache(folderId);
-  if (cachedFiles) {
+  if (!cachedFiles) {
+    fileList.innerHTML = `<p class="p-8 text-center text-muted">Loading files...</p>`;
+  } else {
     console.log("⚡ Instant load from cache");
     renderFilesUI(cachedFiles);
     updateBreadcrumb();
-    hideLoader();
-  } else {
-    showLoader();
-    fileList.innerHTML = "";
   }
 
   // 📡 2. Fetch fresh data from Google Drive in the background
@@ -167,7 +184,17 @@ async function listFiles(folderId) {
     });
 
     const files = response.result.files || [];
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     console.log(`✅ Received ${files.length} fresh files`);
+
+    const freshHash = JSON.stringify(files);
+    const cachedHash = JSON.stringify(cachedFiles || []);
+
+    if (freshHash === cachedHash) {
+      console.log("No changes in Drive, skipping render.");
+      setCacheTimestamp(folderId);
+      return; // Skip re-render entirely
+    }
 
     // --- Custom Sorting Logic ---
     const currentFolderName = folderStack[folderStack.length - 1]?.name || "";
@@ -219,15 +246,16 @@ async function listFiles(folderId) {
       return b.name.localeCompare(a.name);
     });
 
-    // 💾 3. Update cache with fresh data
-    setFilesToCache(folderId, files);
+    // Save to Cache
+    saveFilesToCache(folderId, files);
+    setCacheTimestamp(folderId);
 
-    // 🎨 4. Render fresh data (UI updates smoothly)
+    // Re-render UI with fresh data
     renderFilesUI(files);
     updateBreadcrumb();
     hideLoader();
-  } catch (err) {
-    console.error("ListFiles Error:", err);
+  } catch (error) {
+    console.error("ListFiles Error:", error);
     if (!cachedFiles) {
       hideLoader();
       fileList.textContent = "Error loading files. Check connection.";
@@ -298,6 +326,16 @@ function renderFilesUI(files) {
 function enterFolder(folder) {
   folderStack.push({ id: folder.id, name: folder.name });
   saveFolderId(folderStack); // Persist state
+  
+  // Instant render cache if available
+  const cachedFiles = getFilesFromCache(folder.id);
+  if (cachedFiles) {
+    renderFilesUI(cachedFiles);
+    updateBreadcrumb();
+  } else {
+    fileList.innerHTML = `<p class="p-8 text-center text-muted">Loading...</p>`;
+  }
+
   listFiles(folder.id);
 }
 
