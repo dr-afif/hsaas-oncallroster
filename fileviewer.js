@@ -1,5 +1,5 @@
 // === CONFIG ===
-const API_KEY = window.APP_CONFIG?.DRIVE_API_KEY || "AIzaSyCuQd0yaWz9dQ7_3MBXKt7WV9MIRo4h7kU"; //"AIzaSyD31jjNmYQWOwOnkUHwJpucsU_HceUAJWw";
+const API_KEY = window.APP_CONFIG?.DRIVE_API_KEY || "AIzaSyD31jjNmYQWOwOnkUHwJpucsU_HceUAJWw";
 const ROOT_FOLDER_ID = window.APP_CONFIG?.ROOT_FOLDER_ID || "19hxtBDM7U6IRepoEZiOHVG2MK_erNdrk";
 
 // Month sorting mapping (English & Malay)
@@ -49,17 +49,25 @@ function getSavedFolderId() {
 }
 
 /**
- * Caches a folder's file list in sessionStorage
+ * Caches a folder's file list in localStorage
  */
-function setFilesToCache(folderId, files) {
-  sessionStorage.setItem(`cache_files_${folderId}`, JSON.stringify(files));
+function saveFilesToCache(folderId, files) {
+  const cacheKey = `gdrive_folder_${folderId}`;
+  localStorage.setItem(cacheKey, JSON.stringify(files));
+}
+
+function getCacheTimestamp(folderId) {
+  return localStorage.getItem(`gdrive_folder_time_${folderId}`);
+}
+function setCacheTimestamp(folderId) {
+  localStorage.setItem(`gdrive_folder_time_${folderId}`, Date.now().toString());
 }
 
 /**
  * Retrieves a folder's file list from sessionStorage
  */
 function getFilesFromCache(folderId) {
-  const saved = sessionStorage.getItem(`cache_files_${folderId}`);
+  const saved = localStorage.getItem(`gdrive_folder_${folderId}`);
   try {
     return saved ? JSON.parse(saved) : null;
   } catch (e) {
@@ -100,9 +108,20 @@ function hideLoader() {
   }
 }
 
+// INSTANT UI RENDER on script load
+document.addEventListener("DOMContentLoaded", () => {
+  const currentFolder = folderStack[folderStack.length - 1];
+  const cachedFiles = getFilesFromCache(currentFolder.id);
+  if (cachedFiles) {
+    console.log("⚡ INSTANT load from cache for", currentFolder.id);
+    renderFilesUI(cachedFiles);
+    updateBreadcrumb();
+  }
+});
 
 // Polling for GAPI to load
 async function startGapi() {
+  if(window.PerfTracker) window.PerfTracker.start("Google API load time");
   console.log("🧐 Checking for GAPI...");
   let tries = 0;
   while (typeof gapi === 'undefined' || !gapi.load) {
@@ -125,6 +144,7 @@ async function initializeGapiClient() {
       apiKey: API_KEY,
       discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
     });
+    if(window.PerfTracker) window.PerfTracker.end("Google API load time");
     console.log("👉 Drive API ready");
     // On page load: Restore the last folder from the stack
     const currentFolder = folderStack[folderStack.length - 1];
@@ -132,42 +152,43 @@ async function initializeGapiClient() {
   } catch (err) {
     console.error("GAPI Init Error:", err);
     hideLoader();
-    let errMsg = err.message || JSON.stringify(err) || "Unknown error";
-    // If it's an object with error property
-    if (err.error && err.error.message) {
-      errMsg = err.error.message;
-    } else if (err.details) {
-      errMsg = err.details;
-    }
-    fileList.textContent = "Failed to connect to Google Drive. Error: " + errMsg;
+    fileList.textContent = "Failed to connect to Google Drive.";
   }
 }
 
 async function listFiles(folderId) {
-  // ⚡ 1. Try to load from Cache first for immediate display
+  // Show loading state ONLY if we don't have cache
   const cachedFiles = getFilesFromCache(folderId);
-  if (cachedFiles) {
+  if (!cachedFiles) {
+    fileList.innerHTML = `<p class="p-8 text-center text-muted">Loading files...</p>`;
+  } else {
     console.log("⚡ Instant load from cache");
     renderFilesUI(cachedFiles);
     updateBreadcrumb();
-    hideLoader();
-  } else {
-    showLoader();
-    fileList.innerHTML = "";
   }
 
   // 📡 2. Fetch fresh data from Google Drive in the background
   try {
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     console.log(`📂 Fetching live files for folder: ${folderId}`);
     const response = await gapi.client.drive.files.list({
-      q: `'${folderId}' in parents and trashed=false`, // Use live ID here
+      q: `'${folderId}' in parents and trashed=false`,
       orderBy: "folder,name desc",
       pageSize: 100,
       fields: "files(id, name, mimeType, webViewLink, iconLink, thumbnailLink)"
     });
 
     const files = response.result.files || [];
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     console.log(`✅ Received ${files.length} fresh files`);
+
+    const freshHash = JSON.stringify(files);
+    const cachedHash = JSON.stringify(cachedFiles || []);
+
+    if (freshHash === cachedHash) {
+      console.log("No changes in Drive, skipping render.");
+      return; // Skip re-render entirely
+    }
 
     // --- Custom Sorting Logic ---
     const currentFolderName = folderStack[folderStack.length - 1]?.name || "";
@@ -177,14 +198,11 @@ async function listFiles(folderId) {
       const isFolderA = a.mimeType === "application/vnd.google-apps.folder";
       const isFolderB = b.mimeType === "application/vnd.google-apps.folder";
 
-      // 1. Folders first
       if (isFolderA && !isFolderB) return -1;
       if (!isFolderA && isFolderB) return 1;
 
-      // 2. Month-based sorting
       const getMonthPriority = (name) => {
         const lower = name.toLowerCase().trim();
-        // Check for common month prefixes
         for (const [m, p] of Object.entries(MONTH_ORDER)) {
           if (lower.startsWith(m)) return p;
         }
@@ -195,34 +213,31 @@ async function listFiles(folderId) {
       const pB = getMonthPriority(b.name);
 
       if (pA !== null && pB !== null) {
-        if (pA !== pB) return pA - pB; // Chronological (Jan-Dec)
+        if (pA !== pB) return pA - pB;
       } else if (pA !== null) {
-        return -1; // Month folder before other folder/file
+        return -1;
       } else if (pB !== null) {
         return 1;
       }
 
-      // 3. Year-based sorting (Descending - 2026 before 2025)
       const isYearA = /^\d{4}$/.test(a.name);
       const isYearB = /^\d{4}$/.test(b.name);
       if (isYearA && isYearB) {
         return b.name.localeCompare(a.name);
       }
 
-      // 4. Fallback sorting
       if (isYearFolder) {
-        // Inside a year folder (like 2026), prefer ascending alphabetic for other items
         return a.name.localeCompare(b.name);
       }
 
-      // Maintain original "name desc" behavior for general content
       return b.name.localeCompare(a.name);
     });
 
-    // 💾 3. Update cache with fresh data
-    setFilesToCache(folderId, files);
+    // Save to Cache
+    saveFilesToCache(folderId, files);
+    setCacheTimestamp(folderId);
 
-    // 🎨 4. Render fresh data (UI updates smoothly)
+    // Re-render UI with fresh data
     renderFilesUI(files);
     updateBreadcrumb();
     hideLoader();
@@ -236,6 +251,7 @@ async function listFiles(folderId) {
 }
 
 function renderFilesUI(files) {
+  if(window.PerfTracker) window.PerfTracker.start("File list rendering time");
   fileList.innerHTML = "";
 
   if (files.length === 0) {
@@ -293,6 +309,11 @@ function renderFilesUI(files) {
     }
     fileList.appendChild(div);
   });
+  
+  if(window.PerfTracker) {
+    window.PerfTracker.end("File list rendering time");
+    window.PerfTracker.print();
+  }
 }
 
 function enterFolder(folder) {
@@ -320,8 +341,10 @@ function updateBreadcrumb() {
 
 function openViewer(file) {
   modal.classList.remove("hidden");
-  if (file.mimeType === "application/pdf" || file.mimeType.startsWith("image/")) {
+  if (file.mimeType === "application/pdf") {
     viewer.src = `https://drive.google.com/file/d/${file.id}/preview`;
+  } else if (file.mimeType.startsWith("image/")) {
+    viewer.src = `https://drive.google.com/uc?id=${file.id}`;
   } else {
     viewer.src = file.webViewLink;
   }

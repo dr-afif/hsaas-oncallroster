@@ -7,15 +7,8 @@ let sbClient = null;
 async function getSupabase() {
   if (sbClient) return sbClient;
 
-  function cleanConfigVal(val) {
-    if (!val) return '';
-    let cleaned = String(val).trim();
-    cleaned = cleaned.replace(/^['"]|['"]$/g, '');
-    return cleaned.trim();
-  }
-
-  const url = cleanConfigVal(window.APP_CONFIG?.SUPABASE_URL);
-  const key = cleanConfigVal(window.APP_CONFIG?.SUPABASE_ANON_KEY);
+  const url = window.APP_CONFIG?.SUPABASE_URL;
+  const key = window.APP_CONFIG?.SUPABASE_ANON_KEY;
 
   if (!url || !key || url.includes('PLACEHOLDER')) {
     throw new Error("Supabase configuration is missing.");
@@ -29,7 +22,9 @@ async function getSupabase() {
     }
   }
 
+  if(window.PerfTracker) window.PerfTracker.start("Supabase init time");
   sbClient = window.supabase.createClient(url, key);
+  if(window.PerfTracker) window.PerfTracker.end("Supabase init time");
   return sbClient;
 }
 
@@ -73,29 +68,58 @@ async function fetchContacts() {
   const targetMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
   // 2. Try Cache
-  const cached = localStorage.getItem('contacts_cache');
-  if (cached) {
+  const cachedData = localStorage.getItem('contacts_cache');
+  if (cachedData) {
     try {
-      allContactsData = JSON.parse(cached);
+      const data = JSON.parse(cachedData);
+      allContactsData = data;
       window._orderedDepts = JSON.parse(localStorage.getItem('contacts_order_cache') || '[]');
       window._deptNames = JSON.parse(localStorage.getItem('contacts_names_cache') || '{}');
-      renderDepartments(allContactsData);
-      lastContactsHash = JSON.stringify(allContactsData);
+      renderDepartments(data);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "🔄 Using cached data...";
+      lastDataHash = JSON.stringify(data);
     } catch (e) { }
   }
 
   try {
     const sb = await getSupabase();
 
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
+    // 2. Fetch Roster Month ID for target month
+    const { data: rmData } = await sb.from('roster_months').select('id').eq('month', targetMonth);
+    const rmIds = (rmData || []).map(rm => rm.id);
+
+    // 3. Fetch Roster Cells for the month
+    let activeNames = new Set();
+    if (rmIds.length > 0) {
+      const { data: cells } = await sb.from('roster_cells')
+        .select('raw_text, contacts(short_name)')
+        .in('roster_month_id', rmIds);
+
+      if (cells) {
+        cells.forEach(c => {
+          if (c.contacts?.short_name) activeNames.add(c.contacts.short_name.toLowerCase());
+          if (c.raw_text) activeNames.add(c.raw_text.toLowerCase());
+        });
+      }
+    }
+
     const [contactsRes, deptsRes] = await Promise.all([
-      sb.from('contacts').select('full_name, phone_number, department_id, short_name').eq('active', true).neq('department_id', 'ADMIN').order('short_name'),
+      sb.from('contacts').select('full_name, phone_number, department_id, short_name').eq('active', true).neq('department_id', 'ADMIN').order('full_name'),
       sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('order_index', { ascending: true })
     ]);
 
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     if (contactsRes.error) throw contactsRes.error;
     if (deptsRes.error) throw deptsRes.error;
 
-    const filteredData = contactsRes.data;
+    // 4. Filter contacts based on roster
+    const rawData = contactsRes.data;
+    const data = rawData.filter(c => {
+      const name = (c.short_name || '').toLowerCase();
+      return activeNames.has(name);
+    });
 
     const orderedDepts = deptsRes.data.map(d => d.id);
     const deptNames = {};
@@ -109,51 +133,42 @@ async function fetchContacts() {
     localStorage.setItem('contacts_order_cache', JSON.stringify(orderedDepts));
     localStorage.setItem('contacts_names_cache', JSON.stringify(deptNames));
 
-    const freshHash = JSON.stringify(filteredData);
-    if (freshHash !== lastContactsHash) {
-      allContactsData = filteredData;
-      renderDepartments(filteredData);
+    // Update UI Only if data changed
+    const freshHash = JSON.stringify(data);
+    if (freshHash !== lastDataHash) {
+      allContactsData = data;
+      renderDepartments(data);
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) sourceEl.textContent = "✨ Updated with new data";
       localStorage.setItem('contacts_cache', freshHash);
-      lastContactsHash = freshHash;
+      lastDataHash = freshHash;
+    } else {
+      const sourceEl = document.getElementById("data-source");
+      if (sourceEl) {
+        sourceEl.textContent = "✅ Updated just now";
+        setTimeout(() => { sourceEl.style.opacity = '0.5'; }, 2000); // subtle fade
+      }
     }
   } catch (err) {
     console.error("Contacts Load Error:", err);
-    if (!lastContactsHash) {
+    if (!lastDataHash) {
       showError(err.message || 'Failed to load contacts.');
     }
   }
 }
 
-function toggleClearBtn() {
-  const input = document.getElementById('global-search-input');
-  const btn = document.getElementById('clear-search-btn');
-  if (input && btn) {
-    if (input.value.length > 0) {
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
-  }
-}
-
-function clearSearch() {
-  const input = document.getElementById('global-search-input');
-  if (input) {
-    input.value = '';
-    handleSearch();
-    input.focus();
-  }
-}
-
 function handleSearch() {
-  toggleClearBtn();
   const query = document.getElementById('global-search-input')?.value.toLowerCase() || '';
   renderDepartments(allContactsData, query);
 }
 
 function renderDepartments(data, query = '') {
+  if(window.PerfTracker) window.PerfTracker.start("Contact rendering time");
   const container = document.getElementById('departments');
-  if (!container) return;
+  if (!container) {
+    if(window.PerfTracker) window.PerfTracker.end("Contact rendering time");
+    return;
+  }
 
   if (!data || !data.length) {
     container.innerHTML = '<p class="p-8 text-center text-muted">No contacts found.</p>';
@@ -178,13 +193,12 @@ function renderDepartments(data, query = '') {
     const doctors = grouped[dept];
     if (!doctors) return;
     const displayName = (window._deptNames && window._deptNames[dept]) || dept;
-    const filtered = doctors.filter(d => {
-      const nameMatch = (d.short_name || d.full_name || '').toLowerCase().includes(query);
-      return dept.toLowerCase().includes(query) ||
-             displayName.toLowerCase().includes(query) ||
-             nameMatch ||
-             (d.phone_number || '').includes(query);
-    });
+    const filtered = doctors.filter(d =>
+      dept.toLowerCase().includes(query) ||
+      displayName.toLowerCase().includes(query) ||
+      d.full_name.toLowerCase().includes(query) ||
+      d.phone_number.includes(query)
+    );
 
     if (filtered.length > 0) {
       html += `
@@ -194,13 +208,17 @@ function renderDepartments(data, query = '') {
                         <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
                     </h2>
                     <div class="contacts-grid ${query ? '' : 'hidden'}">
-                        ${filtered.map(d => renderContactRow(d.short_name || d.full_name, d.phone_number, dept)).join('')}
+                        ${filtered.map(d => renderContactRow(d.full_name, d.phone_number, dept)).join('')}
                     </div>
                 </div>
             `;
     }
   });
   container.innerHTML = html || `<p class="p-8 text-center text-muted">No results found for "${query}"</p>`;
+  if(window.PerfTracker) {
+    window.PerfTracker.end("Contact rendering time");
+    window.PerfTracker.print();
+  }
 }
 
 function toggleDept(el) {

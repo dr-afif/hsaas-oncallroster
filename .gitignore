@@ -1,5 +1,4 @@
 # Local configuration
-app-config.js
 
 # OS files
 .DS_Store
@@ -15,9 +14,3 @@ node_modules/
 # Build artifacts
 dist/
 build/
-
-# Local test/debug artifacts
-codegraph_test_db*
-debug.log
-test_kuzu.py
-access-denied-preview.html

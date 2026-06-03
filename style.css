@@ -35,7 +35,6 @@
   overflow: hidden;
   box-shadow: var(--shadow-premium);
   transition: var(--transition);
-  scroll-margin-top: 160px; /* Account for sticky header + chips */
 }
 
 .card-header {
@@ -44,7 +43,7 @@
   justify-content: space-between;
   padding: 0 1.25rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(99, 102, 241, 0.08); /* Slightly darker for better distinction */
+  background: rgba(99, 102, 241, 0.03);
   position: relative;
 }
 
@@ -123,6 +122,14 @@
 }
 
 
+#app-footer {
+  text-align: center;
+  padding: 1rem 1rem 8rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
 #data-source {
   font-size: 10px;
   font-weight: 800;
@@ -137,38 +144,4 @@
   padding: 0 2px;
   border-radius: 2px;
   font-weight: 500;
-}
-
-/* Back to Top FAB */
-#back-to-top {
-  position: fixed;
-  bottom: 100px;
-  right: 20px;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  z-index: 999;
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-  transition: opacity 0.3s ease, transform 0.3s ease, background 0.2s ease;
-}
-
-#back-to-top.hidden-fab {
-  opacity: 0;
-  transform: translateY(20px);
-  pointer-events: none;
-}
-
-#back-to-top:active {
-  transform: translateY(0) scale(0.92);
-  background: var(--primary-hover);
 }

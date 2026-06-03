@@ -1,11 +1,10 @@
 {
   "name": "HSAAS On-Call Roster",
   "short_name": "RosterHSAAS",
-  "description": "Hospital Sultan Abdul Aziz Shah (HSAAS) On-Call Doctor Roster Dashboard",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#6366f1",
+  "theme_color": "#1976d2",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -16,15 +15,6 @@
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "icons/logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "HSAAS On-Call Roster Dashboard"
     }
   ]
 }

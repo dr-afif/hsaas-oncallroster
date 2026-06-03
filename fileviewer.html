@@ -5,8 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roster Files - HSAAS</title>
-  <link rel="stylesheet" href="fileviewer_style.css?v=2.4.0">
-  <link rel="stylesheet" href="navbar.css?v=2.4.0">
+  <link rel="stylesheet" href="fileviewer_style.css">
+  <link rel="stylesheet" href="navbar.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
@@ -17,17 +17,32 @@
       opacity: 0;
     }
 
-    body.ready {
+    html.ready body, body.ready {
       visibility: visible;
       opacity: 1;
       transition: opacity 0.2s ease-in;
     }
   </style>
 
-  <script src="app-config.js?v=2.4.0"></script>
+  <script>window.perfMarks = { start: performance.now() };</script>
+  <link rel="prefetch" href="index.html">
+  <link rel="prefetch" href="contacts.html">
+  <script src="app-config.js"></script>
+  <script>
+    if (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_URL && !window.APP_CONFIG.SUPABASE_URL.includes('PLACEHOLDER')) {
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = new URL(window.APP_CONFIG.SUPABASE_URL).origin;
+      document.head.appendChild(link);
+    }
+    const fastAuthExp = sessionStorage.getItem('fast_auth_expires');
+    if (fastAuthExp && Date.now() < parseInt(fastAuthExp, 10)) {
+      document.documentElement.classList.add('ready');
+      console.log('[Perf] Fast auth hit:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
+    }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="./auth/auth.js"></script>
-  <script src="pwa-install.js?v=2.4.0" defer></script>
   <script>
     (async () => {
       // Wait for Auth module to load
@@ -40,25 +55,22 @@
         });
       }
       try {
+        if(window.PerfTracker) window.PerfTracker.start("Auth init time");
         await Auth.initAuth();
         let authed = await Auth.isAuthenticated();
+        if(window.PerfTracker) window.PerfTracker.end("Auth init time");
         if (!authed) {
+          sessionStorage.removeItem('fast_auth_expires');
           // Store current path for redirect after login
           const ret = location.pathname + location.search + location.hash;
           sessionStorage.setItem('post_login_redirect', ret);
           location.replace('./login.html');
         } else {
-          const sb = await Auth.initAuth();
-          const { data: hasAccess, error } = await sb.rpc('check_viewer_access');
-          
-          if (error || hasAccess === false) {
-            location.replace('./access-denied.html');
-            return;
-          }
-
+          sessionStorage.setItem('fast_auth_expires', Date.now() + 10 * 60 * 1000);
           // Show the page only if authenticated
           Auth.populateUserInfo();
           document.body.classList.add('ready');
+          console.log('[Perf] Auth resolved:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
         }
       } catch (err) {
         console.error("Auth Guard error:", err);
@@ -67,40 +79,33 @@
     })();
   </script>
 
-  <script src="fileviewer.js?v=2.4.0" defer></script>
-  <script src="swipe.js?v=2.4.0" defer></script>
+  <script src="fileviewer.js" defer></script>
+  <script src="swipe.js" defer></script>
   <script async defer src="https://apis.google.com/js/api.js"></script>
 </head>
 
 <body>
-  <!-- TOP HALF: Branding strip — scrolls away with page -->
-  <div id="header-top-half">
-    <div class="header-brand">
-      <img src="hsaas-logo.png" alt="HSAAS Logo" id="logo">
-      <div class="header-identity">
-        <h1 class="header-title">ROSTER FILES</h1>
-        <span class="user-profile-email"></span>
-      </div>
-      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle Dark Mode">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" />
-          <line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" />
-          <line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22">
-        </svg>
-      </button>
-    </div>
-  </div>
-
   <div id="page-wrapper">
-    <!-- BOTTOM HALF: Sticky controls -->
     <header id="app-header">
+      <div class="header-top">
+        <img src="hsaas-logo.png" alt="HSAAS Logo" id="logo">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle Dark Mode">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22">
+          </svg>
+        </button>
+      </div>
+      <h1 class="header-title">ROSTER FILES</h1>
+      <span class="user-profile-email"></span>
       <nav id="breadcrumb"></nav>
     </header>
 
@@ -117,11 +122,6 @@
       </div>
       <div id="file-list" class="grid hidden"></div>
     </main>
-
-    <footer id="app-footer">
-      <small>&copy; Dr. Muhammad Afif Abdullah 2025</small><br>
-      <small id="app-version-display">Version 2.4.0</small>
-    </footer>
   </div>
 
   <div id="viewer-modal" class="modal hidden">
@@ -163,6 +163,11 @@
       if (window.navigator?.vibrate) window.navigator.vibrate(10);
     }
     document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+  </script>
+  <script>
+    window.addEventListener('load', () => {
+      console.log('[Perf] Full page load:', (performance.now() - window.perfMarks.start).toFixed(2), 'ms');
+    });
   </script>
 </body>
 

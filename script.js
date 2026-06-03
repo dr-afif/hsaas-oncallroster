@@ -7,15 +7,8 @@ let sbClient = null;
 async function getSupabase() {
   if (sbClient) return sbClient;
 
-  function cleanConfigVal(val) {
-    if (!val) return '';
-    let cleaned = String(val).trim();
-    cleaned = cleaned.replace(/^['"]|['"]$/g, '');
-    return cleaned.trim();
-  }
-
-  const url = cleanConfigVal(window.APP_CONFIG?.SUPABASE_URL);
-  const key = cleanConfigVal(window.APP_CONFIG?.SUPABASE_ANON_KEY);
+  const url = window.APP_CONFIG?.SUPABASE_URL;
+  const key = window.APP_CONFIG?.SUPABASE_ANON_KEY;
 
   if (!url || !key || url.includes('PLACEHOLDER')) {
     const platform = window.location.hostname.includes('github.io') ? 'GitHub Secrets' : 'Cloudflare Environment Variables';
@@ -37,7 +30,9 @@ async function getSupabase() {
     throw new Error("Supabase SDK failed to load. Check your internet connection or script tags.");
   }
 
+  if(window.PerfTracker) window.PerfTracker.start("Supabase init time");
   sbClient = window.supabase.createClient(url, key);
+  if(window.PerfTracker) window.PerfTracker.end("Supabase init time");
   return sbClient;
 }
 
@@ -152,7 +147,7 @@ async function loadDashboard() {
       window._orderedDepts = JSON.parse(localStorage.getItem('dept_order_cache') || '[]');
       window._deptNames = JSON.parse(localStorage.getItem('dept_names_cache') || '{}');
       allContactsMap = JSON.parse(localStorage.getItem('contacts_cache_map') || '{}');
-      renderDashboard(data, "📂 Supabase (Cached)");
+      renderDashboard(data, "🔄 Using cached data...");
       lastDataHash = JSON.stringify(data);
     } catch (e) {
       console.warn("Cache fail", e);
@@ -165,12 +160,14 @@ async function loadDashboard() {
     const sb = await getSupabase();
     console.log("Fetching roster for:", dateStr);
 
+    if(window.PerfTracker) window.PerfTracker.start("Snapshot fetch time");
     const [rosterRes, deptsRes, allContactsRes] = await Promise.all([
       sb.from('view_roster_merged').select('*').eq('date', dateStr).neq('department_id', 'ADMIN').order('slot_order', { ascending: true }),
       sb.from('departments').select('id, name').eq('active', true).neq('id', 'ADMIN').order('order_index', { ascending: true }),
       sb.from('contacts').select('short_name, phone_number, department_id').eq('active', true)
     ]);
 
+    if(window.PerfTracker) window.PerfTracker.end("Snapshot fetch time");
     if (rosterRes.error) throw rosterRes.error;
     if (deptsRes.error) throw deptsRes.error;
     if (allContactsRes.error) console.warn("Contacts fetch failed", allContactsRes.error);
@@ -199,16 +196,18 @@ async function loadDashboard() {
     localStorage.setItem('dept_names_cache', JSON.stringify(deptNames));
     localStorage.setItem('contacts_cache_map', JSON.stringify(contactMap));
 
-    console.log(`Received ${rosterRes.data.length} rows for ${dateStr}`);
-
+    console.log(`Received ${rosterRes.data.length} rows`);
     const freshHash = JSON.stringify(data);
     if (freshHash !== lastDataHash) {
-      renderDashboard(data, "📂 Supabase (Live)");
+      renderDashboard(data, "✨ Updated with new data");
       localStorage.setItem(cacheKey, freshHash);
       lastDataHash = freshHash;
     } else {
       const sourceEl = document.getElementById("data-source");
-      if (sourceEl) sourceEl.textContent = "📂 Supabase (Up to date)";
+      if (sourceEl) {
+        sourceEl.textContent = "✅ Updated just now";
+        setTimeout(() => { sourceEl.style.opacity = '0.5'; }, 2000); // subtle fade
+      }
     }
 
     if (data.length === 0) {
@@ -242,29 +241,7 @@ async function loadDashboard() {
 }
 
 // --- Search & Filtering ---
-function toggleClearBtn() {
-  const input = document.getElementById('global-search-input');
-  const btn = document.getElementById('clear-search-btn');
-  if (input && btn) {
-    if (input.value.length > 0) {
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
-  }
-}
-
-function clearSearch() {
-  const input = document.getElementById('global-search-input');
-  if (input) {
-    input.value = '';
-    handleSearch();
-    input.focus();
-  }
-}
-
 function handleSearch() {
-  toggleClearBtn();
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     const query = document.getElementById('global-search-input')?.value.toLowerCase() || '';
@@ -314,11 +291,9 @@ function renderDashboard(data, sourceLabel, query = '') {
 
     const names = row.merged_names ? row.merged_names.split('\n') : [];
     const phones = row.merged_phones ? row.merged_phones.split('\n') : [];
-    const subLabels = row.sub_labels || [];
 
     names.forEach((name, i) => {
       let phone = phones[i] || '-';
-      const subLabel = subLabels[i] || '';
 
       // Fix: If phone is missing or '-', try to match from contacts pool
       if (phone === '-' || !phone || phone === 'Unknown') {
@@ -328,26 +303,21 @@ function renderDashboard(data, sourceLabel, query = '') {
         }
       }
 
-      grouped[main][sub].push({ name, subLabel, phone });
+      grouped[main][sub].push({ name, phone });
     });
   });
 
   let html = '';
-  const renderedDepts = [];
   deptsInOrder.forEach(mainDept => {
     const subGroups = grouped[mainDept];
     if (!subGroups) return;
     let subHtml = '';
 
-    const displayName = (window._deptNames && window._deptNames[mainDept]) || mainDept;
-
     Object.entries(subGroups).forEach(([subDept, doctors]) => {
       const filteredDoctors = doctors.filter(d =>
         mainDept.toLowerCase().includes(query) ||
-        displayName.toLowerCase().includes(query) ||
         subDept.toLowerCase().includes(query) ||
         d.name.toLowerCase().includes(query) ||
-        d.subLabel.toLowerCase().includes(query) ||
         d.phone.includes(query)
       );
 
@@ -355,17 +325,15 @@ function renderDashboard(data, sourceLabel, query = '') {
         if (subDept !== 'General' && subDept !== mainDept) {
           subHtml += `<h3>${highlightText(subDept, query)}</h3>`;
         }
-        filteredDoctors.forEach(({ name, subLabel, phone }) => {
-          subHtml += renderDoctorRow(highlightText(name, query), highlightText(phone, query), highlightText(subLabel, query));
+        filteredDoctors.forEach(({ name, phone }) => {
+          subHtml += renderDoctorRow(highlightText(name, query), highlightText(phone, query));
         });
       }
     });
 
     if (subHtml) {
-      renderedDepts.push(mainDept);
       const displayName = (window._deptNames && window._deptNames[mainDept]) || mainDept;
-      const safeId = mainDept.replace(/[^a-zA-Z0-9]/g, '-');
-      const cardId = `dept-card-${safeId}`;
+      const cardId = `dept-card-${mainDept.replace(/\s+/g, '-')}`;
       
       html += `
                 <div class="doctor-card" id="${cardId}">
@@ -382,30 +350,17 @@ function renderDashboard(data, sourceLabel, query = '') {
   });
 
   container.innerHTML = html || `<p class="p-8 text-center text-muted">No results found for "${query}"</p>`;
-
-  // Chips: show when not searching, hide when filtering
-  const chipsBar = document.getElementById('dept-chips-bar');
-  if (chipsBar) {
-    if (query) {
-      chipsBar.classList.add('hidden');
-    } else {
-      chipsBar.classList.remove('hidden');
-      renderChips(renderedDepts);
-    }
-  }
+  if(window.PerfTracker) window.PerfTracker.print();
 }
 
-function renderDoctorRow(name, phone, subLabel = '') {
+function renderDoctorRow(name, phone) {
   const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
   const tel = cleanPhone ? `tel:${phone}` : '#';
   const wa = cleanPhone ? `https://wa.me/6${cleanPhone}` : '#';
 
-  const subLabelHtml = subLabel ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">${subLabel}</div>` : '';
-
   return `
         <div class="doctor-row">
             <div class="doctor-info">
-                ${subLabelHtml}
                 <strong>${name}</strong>
                 <span>${phone || 'No phone'}</span>
             </div>
@@ -419,137 +374,6 @@ function renderDoctorRow(name, phone, subLabel = '') {
             </div>
         </div>
     `;
-}
-
-// --- Department Quick-Jump Chips ---
-function renderChips(depts) {
-  const bar = document.getElementById('dept-chips-bar');
-  if (!bar) return;
-
-  if (!depts || depts.length === 0) {
-    bar.innerHTML = '';
-    return;
-  }
-
-  bar.innerHTML = depts.map(deptId => {
-    const displayName = (window._deptNames && window._deptNames[deptId]) || deptId;
-    const safeId = deptId.replace(/[^a-zA-Z0-9]/g, '-');
-    const chipId = `chip-${safeId}`;
-    const cardId = `dept-card-${safeId}`;
-    return `<button class="dept-chip" id="${chipId}" onclick="jumpToDept('${cardId}', '${chipId}')">${displayName}</button>`;
-  }).join('');
-
-  if (!bar.dataset.dragInit) {
-    bar.dataset.dragInit = 'true';
-    let isDown = false;
-    let startX;
-    let scrollLeft;
-    let dragged = false;
-
-    bar.addEventListener('mousedown', (e) => {
-      isDown = true;
-      dragged = false;
-      bar.style.cursor = 'grabbing';
-      startX = e.pageX - bar.offsetLeft;
-      scrollLeft = bar.scrollLeft;
-    });
-    bar.addEventListener('mouseleave', () => {
-      isDown = false;
-      bar.style.cursor = 'grab';
-    });
-    bar.addEventListener('mouseup', () => {
-      isDown = false;
-      bar.style.cursor = 'grab';
-    });
-    bar.addEventListener('mousemove', (e) => {
-      if (!isDown) return;
-      e.preventDefault();
-      dragged = true;
-      const x = e.pageX - bar.offsetLeft;
-      const walk = (x - startX) * 2; // scroll faster
-      bar.scrollLeft = scrollLeft - walk;
-    });
-    // Prevent click on chips if we were dragging
-    bar.addEventListener('click', (e) => {
-      if (dragged) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }, true); // use capture phase
-  }
-
-  setupChipObserver();
-}
-
-window._isJumping = false;
-window._jumpTimer = null;
-
-function jumpToDept(cardId, chipId) {
-  triggerHaptic();
-  const card = document.getElementById(cardId);
-  if (!card) {
-    console.warn(`Card not found: ${cardId}`);
-    return;
-  }
-  
-  // Temporarily disable the scroll observer so it doesn't fight our jump
-  window._isJumping = true;
-  clearTimeout(window._jumpTimer);
-  window._jumpTimer = setTimeout(() => {
-    window._isJumping = false;
-  }, 1000); // 1 second is enough to cover smooth scroll duration
-  
-  const header = document.getElementById('app-header');
-  const offset = header ? header.offsetHeight + 20 : 170;
-  
-  // Use offsetTop for a stable absolute position
-  const targetTop = card.offsetTop - offset;
-
-  // Scroll the page to the card
-  document.documentElement.scrollTo({ top: targetTop, behavior: 'smooth' });
-
-  // Just update the visual highlight immediately
-  document.querySelectorAll('.dept-chip').forEach(c => c.classList.remove('active'));
-  const chip = document.getElementById(chipId);
-  if (chip) {
-    chip.classList.add('active');
-    
-    // Smoothly scroll the chip bar to center this chip
-    const bar = document.getElementById('dept-chips-bar');
-    if (bar) {
-      const scrollPos = (chip.offsetLeft - bar.offsetLeft) - bar.offsetWidth / 2 + chip.offsetWidth / 2;
-      bar.scrollTo({ left: scrollPos, behavior: 'smooth' });
-    }
-  }
-}
-
-function setupChipObserver() {
-  if (window._chipObserver) window._chipObserver.disconnect();
-  let _chipScrollTimer = null;
-  window._chipObserver = new IntersectionObserver((entries) => {
-    if (window._isJumping) return; // Ignore intersections while we are manually jumping
-    
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const rawId = entry.target.id.replace('dept-card-', '');
-        document.querySelectorAll('.dept-chip').forEach(c => c.classList.remove('active'));
-        const chip = document.getElementById(`chip-${rawId}`);
-        if (chip) {
-          chip.classList.add('active');
-          // Only scroll horizontally within the chip bar to avoid any vertical page jumps
-          clearTimeout(_chipScrollTimer);
-          _chipScrollTimer = setTimeout(() => {
-            const bar = document.getElementById('dept-chips-bar');
-            if (bar) {
-              const scrollPos = (chip.offsetLeft - bar.offsetLeft) - bar.offsetWidth / 2 + chip.offsetWidth / 2;
-              bar.scrollTo({ left: scrollPos, behavior: 'smooth' });
-            }
-          }, 100);
-        }
-      }
-    });
-  }, { threshold: 0, rootMargin: '-15% 0px -45% 0px' });
-  document.querySelectorAll('.doctor-card').forEach(card => window._chipObserver.observe(card));
 }
 
 async function shareCardAsImage(cardId, deptName) {
@@ -579,32 +403,11 @@ async function shareCardAsImage(cardId, deptName) {
     const fileName = `HSAAS_Roster_${deptName}_${dateStr.replace(/[/\\?%*:|"<>]/g, '-')}.png`;
     const file = new File([blob], fileName, { type: 'image/png' });
 
-    // Extract rich text from the card DOM for the sharing text
-    let shareText = `*${deptName} Roster*\n${dateStr}\n`;
-    if (card) {
-      Array.from(card.children).forEach(child => {
-        if (child.tagName === 'H3') {
-          shareText += `\n*${child.textContent.trim()}*\n`;
-        } else if (child.classList.contains('doctor-row')) {
-          const subLabelEl = child.querySelector('.doctor-info div');
-          const subLabelInfo = subLabelEl ? subLabelEl.textContent.trim() : '';
-          const nameInfo = child.querySelector('strong')?.textContent.trim() || '';
-          const phoneInfo = child.querySelector('span')?.textContent.trim() || '';
-          
-          if (subLabelInfo) {
-            shareText += `_${subLabelInfo}_\n${nameInfo} - ${phoneInfo}\n\n`;
-          } else {
-            shareText += `${nameInfo} - ${phoneInfo}\n`;
-          }
-        }
-      });
-    }
-
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         files: [file],
         title: `${deptName} Roster`,
-        text: shareText
+        text: `On-Call Roster for ${deptName} (${dateStr})`
       });
     } else {
       const link = document.createElement('a');
@@ -619,24 +422,3 @@ async function shareCardAsImage(cardId, deptName) {
     if (shareBtn) shareBtn.style.display = 'flex';
   }
 }
-
-// --- Back to Top FAB ---
-function scrollToTop() {
-  window._isJumping = true; // Disable scroll spy during jump
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  
-  // Re-enable scroll spy after animation
-  setTimeout(() => {
-    window._isJumping = false;
-  }, 800);
-}
-
-window.addEventListener('scroll', () => {
-  const fab = document.getElementById('back-to-top');
-  if (!fab) return;
-  if (window.scrollY > 300) {
-    fab.classList.remove('hidden-fab');
-  } else {
-    fab.classList.add('hidden-fab');
-  }
-});

@@ -1,23 +1,17 @@
-const CACHE_NAME = "roster-cache-v22"; // Bumped for v2.3.1 PWA install update
+const CACHE_NAME = "roster-cache-v16"; // Bumped to force config.js refresh and new HTML strategy
 const urlsToCache = [
   "./",
-  "./app-config.js",
+  "./config.js",
   "./hsaas-logo.png",
   "./index.html",
   "./contacts.html",
-  "./fileviewer.html",
   "./style.css",
-  "./navbar.css",
   "./script.js",
   "./contacts.js",
-  "./fileviewer.js",
-  "./swipe.js",
-  "./auth/auth.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./offline.html",
-  "./pwa-install.js"
+  "./offline.html"
 ];
 
 // ---- Install: precache essential assets (best-effort) ----
@@ -60,7 +54,24 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Bypass cross-origin restrictions
+  // Strategy: Roster Data -> network-first (ensure offline availability)
+  // We detect snapshot.json by the file name so it works on GitHub or Internal servers
+  if (url.pathname.endsWith('/snapshot.json')) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Bypass cross-origin (except the snapshot)
   if (url.origin !== self.location.origin) return;
 
   // Bypass auth-related routes
@@ -81,20 +92,18 @@ self.addEventListener("fetch", (event) => {
 
   if (isHTML) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          // Update cache copy for offline
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request).then((networkResponse) => {
           if (networkResponse && networkResponse.ok) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse.clone()));
           }
           return networkResponse;
-        })
-        .catch(async () => {
-          // Offline: serve cached page, else offline.html
-          const cached = await caches.match(request);
-          return cached || caches.match("./offline.html");
-        })
+        }).catch(() => null);
+        
+        event.waitUntil(fetchPromise);
+        
+        return cachedResponse || fetchPromise.then(res => res || caches.match("./offline.html"));
+      })
     );
     return;
   }

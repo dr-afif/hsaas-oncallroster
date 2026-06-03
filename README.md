@@ -55,4 +55,4 @@ The current setup uses Auth0. For institutional migration:
 ---
 
 **Author:** Dr. Muhammad Afif Abdullah
-**Version:** 2.4.0
+**Version:** 2.0 (Migration-Ready)
